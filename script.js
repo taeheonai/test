@@ -34,6 +34,12 @@ const SHAPES = {
 
 const PIECE_KEYS = Object.keys(SHAPES);
 
+const GRAVITY = 0.32;
+const MAX_PARTICLES = 700;
+
+let particles = [];
+let flashes = [];
+
 let grid;
 let current;
 let next;
@@ -83,10 +89,108 @@ function merge() {
   });
 }
 
+function spawnDroplets(row, rowColors) {
+  if (particles.length > MAX_PARTICLES) return;
+  for (let c = 0; c < COLS; c++) {
+    const color = rowColors[c];
+    const count = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: c * BLOCK + Math.random() * BLOCK,
+        y: row * BLOCK + Math.random() * BLOCK,
+        vx: (Math.random() - 0.5) * 9,
+        vy: -(2 + Math.random() * 5.5),
+        r: 1.8 + Math.random() * 3,
+        color,
+        life: 1,
+        decay: 0.012 + Math.random() * 0.014,
+      });
+    }
+  }
+  flashes.push({ row, life: 1 });
+}
+
+function updateParticles(delta) {
+  const step = Math.min(delta / 16.67, 3);
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.vy += GRAVITY * step;
+    p.x += p.vx * step;
+    p.y += p.vy * step;
+
+    if (p.x < p.r) {
+      p.x = p.r;
+      p.vx *= -0.5;
+    } else if (p.x > board.width - p.r) {
+      p.x = board.width - p.r;
+      p.vx *= -0.5;
+    }
+    if (p.y > board.height - p.r) {
+      p.y = board.height - p.r;
+      p.vy *= -0.35;
+      p.vx *= 0.7;
+      p.decay *= 2.2; // 바닥에 닿은 물방울은 고이지 않고 빠르게 스며든다
+    }
+
+    p.life -= p.decay * step;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    flashes[i].life -= 0.06 * step;
+    if (flashes[i].life <= 0) flashes.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  flashes.forEach(f => {
+    const y = f.row * BLOCK;
+    const gradient = ctx.createLinearGradient(0, y, 0, y + BLOCK);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0.5, 'rgba(210, 240, 255, 1)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.globalAlpha = Math.max(f.life, 0) * 0.7;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, y, board.width, BLOCK);
+  });
+
+  particles.forEach(p => {
+    const speed = Math.hypot(p.vx, p.vy);
+    const stretch = 1 + Math.min(speed / 9, 0.9);
+    const alpha = Math.max(p.life, 0);
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.atan2(p.vy, p.vx));
+    ctx.scale(stretch, 1 / stretch);
+
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(-p.r * 0.25, -p.r * 0.25, p.r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  ctx.restore();
+}
+
 function clearLines() {
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
     if (grid[r].every(cell => cell !== null)) {
+      spawnDroplets(r, grid[r]);
       grid.splice(r, 1);
       grid.unshift(Array(COLS).fill(null));
       cleared++;
@@ -123,7 +227,6 @@ function spawn() {
 function gameOver() {
   running = false;
   gameOverEl.classList.remove('hidden');
-  cancelAnimationFrame(animationId);
 }
 
 function move(dx) {
@@ -183,10 +286,14 @@ function draw() {
     }
   }
 
-  current.cells.forEach(({ x, y }) => {
-    const gy = y + current.y;
-    if (gy >= 0) drawCell(ctx, x + current.x, gy, COLORS[current.key]);
-  });
+  if (running) {
+    current.cells.forEach(({ x, y }) => {
+      const gy = y + current.y;
+      if (gy >= 0) drawCell(ctx, x + current.x, gy, COLORS[current.key]);
+    });
+  }
+
+  drawParticles();
 }
 
 function drawNext() {
@@ -200,18 +307,25 @@ function drawNext() {
 }
 
 function update(time = 0) {
-  if (!running) return;
+  const delta = Math.min(time - lastTime, 100);
+  lastTime = time;
+
   if (!paused) {
-    const delta = time - lastTime;
-    dropCounter += delta;
-    if (dropCounter > dropInterval) {
-      softDrop();
-      dropCounter = 0;
+    if (running) {
+      dropCounter += delta;
+      if (dropCounter > dropInterval) {
+        softDrop();
+        dropCounter = 0;
+      }
     }
+    updateParticles(delta);
     draw();
   }
-  lastTime = time;
-  animationId = requestAnimationFrame(update);
+
+  // 게임 오버 후에도 남은 물방울이 사라질 때까지 계속 그린다
+  if (running || particles.length > 0 || flashes.length > 0) {
+    animationId = requestAnimationFrame(update);
+  }
 }
 
 function resetGame() {
@@ -223,6 +337,8 @@ function resetGame() {
   dropCounter = 0;
   lastTime = 0;
   paused = false;
+  particles = [];
+  flashes = [];
   gameOverEl.classList.add('hidden');
   next = randomPiece();
   spawn();

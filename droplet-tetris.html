@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>물방울 테트리스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ink: #071019;
+    --tank: #0d1b28;
+    --panel: #10202e;
+    --line: #1c3a4f;
+    --text: #dceaf3;
+    --muted: #6f92a8;
+    --accent: #35d6cf;
+
+    --display: 'Black Han Sans', 'IBM Plex Sans KR', sans-serif;
+    --ui: 'IBM Plex Sans KR', system-ui, sans-serif;
+    --data: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    background-image:
+      radial-gradient(120% 80% at 50% -10%, rgba(53, 214, 207, 0.10), transparent 60%),
+      radial-gradient(90% 60% at 50% 110%, rgba(59, 91, 250, 0.08), transparent 60%);
+    color: var(--text);
+    font-family: var(--ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 16px 36px;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  /* ---------- 머리말 ---------- */
+
+  .masthead { text-align: center; }
+
+  .masthead h1 {
+    font-family: var(--display);
+    font-size: clamp(30px, 8vw, 44px);
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    margin: 0;
+    color: var(--accent);
+    background-image: linear-gradient(172deg, #eafcff 8%, var(--accent) 58%, #1f8fb8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-wrap: balance;
+  }
+
+  .masthead p {
+    font-family: var(--data);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 8px 0 0;
+  }
+
+  /* ---------- 판 + 계기판 ---------- */
+
+  .field {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .tank {
+    position: relative;
+    padding: 7px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--tank);
+    box-shadow:
+      inset 0 0 44px rgba(53, 214, 207, 0.07),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  /* 수면 — 수조 위쪽에 걸린 얇은 물빛 띠 */
+  .tank::before {
+    content: "";
+    position: absolute;
+    inset: 7px 7px auto 7px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+  }
+
+  canvas#board { display: block; border-radius: 2px; }
+
+  .overlay {
+    position: absolute;
+    inset: 7px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 20px;
+    text-align: center;
+    background: rgba(7, 16, 25, 0.82);
+    backdrop-filter: blur(2px);
+    border-radius: 2px;
+  }
+
+  .overlay[hidden] { display: none; }
+
+  .overlay h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .overlay p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--muted);
+    max-width: 22ch;
+  }
+
+  .overlay .final {
+    font-family: var(--data);
+    font-size: 26px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+
+  /* ---------- 계기판 레일 ---------- */
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 132px;
+    flex: none;
+  }
+
+  .well {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .eyebrow {
+    font-family: var(--data);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  canvas#next { display: block; }
+
+  .readouts {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .readout {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 11px;
+    border-top: 1px solid var(--line);
+  }
+
+  .readout:first-child { border-top: none; }
+
+  .readout dt {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .readout dd {
+    margin: 0;
+    font-family: var(--data);
+    font-weight: 500;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  .readout.lead { padding: 11px; }
+  .readout.lead dd { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; }
+  .readout dd.word { font-family: var(--ui); font-size: 13px; color: var(--accent); }
+
+  @keyframes surge {
+    0%   { color: var(--accent); transform: translateY(-2px); }
+    100% { color: var(--text); transform: none; }
+  }
+
+  .readout dd.surge { animation: surge 520ms ease-out; }
+
+  /* ---------- 조작 ---------- */
+
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+
+  button {
+    font-family: var(--ui);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  }
+
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06222a;
+    font-weight: 600;
+  }
+
+  button.primary:hover { background: #5fe8e1; border-color: #5fe8e1; color: #06222a; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    font-family: var(--data);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .legend b {
+    color: var(--text);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  /* 터치 패드 — 포인터가 거칠거나 화면이 좁을 때만 */
+  .pad { display: none; }
+
+  @media (hover: none), (max-width: 620px) {
+    .pad {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+    .pad button { padding: 14px 0; font-size: 16px; }
+    .legend { display: none; }
+  }
+
+  @media (max-width: 620px) {
+    .field { flex-direction: column; align-items: center; }
+    .rail { width: 100%; flex-direction: row; flex-wrap: wrap; }
+    .well { flex: none; flex-direction: row; gap: 10px; }
+    .readouts { flex: 1 1 200px; }
+    .actions { flex: 1 1 100%; flex-direction: row; }
+    .actions button { flex: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <header class="masthead">
+    <h1>물방울 테트리스</h1>
+    <p>줄이 차면 블록이 물방울로 터진다</p>
+  </header>
+
+  <div class="field">
+    <div class="tank">
+      <canvas id="board"></canvas>
+
+      <div class="overlay" id="intro">
+        <h2>준비 완료</h2>
+        <p>줄을 완성할 때마다 블록이 제 색깔의 물방울로 흩어집니다.</p>
+        <button class="primary" id="introStart">시작</button>
+      </div>
+
+      <div class="overlay" id="gameOver" hidden>
+        <h2>게임 오버</h2>
+        <span class="final" id="finalScore">0</span>
+        <p id="finalNote">블록이 천장에 닿았습니다.</p>
+        <button class="primary" id="againBtn">다시 시작</button>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="well">
+        <span class="eyebrow">Next</span>
+        <canvas id="next"></canvas>
+      </div>
+
+      <dl class="readouts">
+        <div class="readout lead">
+          <dt>점수</dt>
+          <dd id="score">0</dd>
+        </div>
+        <div class="readout">
+          <dt>레벨</dt>
+          <dd id="level">1</dd>
+        </div>
+        <div class="readout">
+          <dt>지운 줄</dt>
+          <dd id="lines">0</dd>
+        </div>
+        <div class="readout">
+          <dt>마지막 소거</dt>
+          <dd class="word" id="lastClear">—</dd>
+        </div>
+      </dl>
+
+      <div class="actions">
+        <button class="primary" id="startBtn">시작</button>
+        <button id="pauseBtn">일시정지</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pad">
+    <button id="padLeft" aria-label="왼쪽으로 이동">←</button>
+    <button id="padRotate" aria-label="회전">↻</button>
+    <button id="padRight" aria-label="오른쪽으로 이동">→</button>
+    <button id="padDrop" aria-label="즉시 낙하">⤓</button>
+  </div>
+
+  <div class="legend">
+    <span><b>← →</b> 이동</span>
+    <span><b>↓</b> 빠르게 내리기</span>
+    <span><b>↑</b> 회전</span>
+    <span><b>Space</b> 즉시 낙하</span>
+    <span><b>P</b> 일시정지</span>
+  </div>
+</div>
+
+<script>
+  const COLS = 12;
+  const ROWS = 20;
+  const BLOCK = window.innerWidth < 430 ? 17 : 24;
+  const VIEW_W = COLS * BLOCK;
+  const VIEW_H = ROWS * BLOCK;
+  const NEXT_VIEW = 92;
+  const NEXT_CELL = 20;
+
+  const COLORS = {
+    I: '#00c3ff',
+    J: '#3b5bfa',
+    L: '#ff9f1a',
+    O: '#ffe14d',
+    S: '#4dff88',
+    T: '#c94dff',
+    Z: '#ff4d4d',
+  };
+
+  const SHAPES = {
+    I: [[0,1],[1,1],[2,1],[3,1]],
+    J: [[0,0],[0,1],[1,1],[2,1]],
+    L: [[2,0],[0,1],[1,1],[2,1]],
+    O: [[1,0],[2,0],[1,1],[2,1]],
+    S: [[1,0],[2,0],[0,1],[1,1]],
+    T: [[1,0],[0,1],[1,1],[2,1]],
+    Z: [[0,0],[1,0],[1,1],[2,1]],
+  };
+
+  const PIECE_KEYS = Object.keys(SHAPES);
+
+  // 한 번에 지운 줄 수를 부르는 이름
+  const CLEAR_NAMES = ['—', '싱글', '더블', '트리플', '테트리스'];
+
+  const GRAVITY = 0.32;
+  const MAX_PARTICLES = 700;
+
+  // 시작 전 판에 깔아 두는 그럴듯한 자리 (완성줄은 없음)
+  const RESTING_ROWS = [
+    '.....T......',
+    'JJ..TTT.OO..',
+    'JJZZSSS.OOLL',
+  ];
+
+  const scoreEl = document.getElementById('score');
+  const levelEl = document.getElementById('level');
+  const linesEl = document.getElementById('lines');
+  const lastClearEl = document.getElementById('lastClear');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const introEl = document.getElementById('intro');
+  const gameOverEl = document.getElementById('gameOver');
+  const finalScoreEl = document.getElementById('finalScore');
+  const finalNoteEl = document.getElementById('finalNote');
+
+  function setupCanvas(canvas, width, height) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    const context = canvas.getContext('2d');
+    context.scale(dpr, dpr);
+    return context;
+  }
+
+  const ctx = setupCanvas(document.getElementById('board'), VIEW_W, VIEW_H);
+  const nextCtx = setupCanvas(document.getElementById('next'), NEXT_VIEW, NEXT_VIEW);
+
+  let particles = [];
+  let flashes = [];
+
+  let grid;
+  let current;
+  let next;
+  let score;
+  let level;
+  let lines;
+  let dropInterval;
+  let dropCounter;
+  let lastTime;
+  let running = false;
+  let paused = false;
+  let animationId;
+
+  function createGrid() {
+    return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  }
+
+  function randomPiece() {
+    const key = PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)];
+    const cells = SHAPES[key].map(([x, y]) => ({ x, y }));
+    return { key, cells, x: Math.floor(COLS / 2) - 2, y: -1 };
+  }
+
+  function rotateCells(cells) {
+    const cx = 1, cy = 1;
+    return cells.map(({ x, y }) => ({
+      x: cx - (y - cy),
+      y: cy + (x - cx),
+    }));
+  }
+
+  function collides(cells, offX, offY) {
+    return cells.some(({ x, y }) => {
+      const nx = x + offX;
+      const ny = y + offY;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny < 0) return false;
+      return grid[ny][nx] !== null;
+    });
+  }
+
+  function merge() {
+    current.cells.forEach(({ x, y }) => {
+      const gx = x + current.x;
+      const gy = y + current.y;
+      if (gy >= 0) grid[gy][gx] = COLORS[current.key];
+    });
+  }
+
+  /* ---------- 물방울 ---------- */
+
+  function spawnDroplets(row, rowColors) {
+    if (particles.length > MAX_PARTICLES) return;
+    for (let c = 0; c < COLS; c++) {
+      const color = rowColors[c];
+      const count = 5 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: c * BLOCK + Math.random() * BLOCK,
+          y: row * BLOCK + Math.random() * BLOCK,
+          vx: (Math.random() - 0.5) * 9,
+          vy: -(2 + Math.random() * 5.5),
+          r: 1.8 + Math.random() * 3,
+          color,
+          life: 1,
+          decay: 0.012 + Math.random() * 0.014,
+        });
+      }
+    }
+    flashes.push({ row, life: 1 });
+  }
+
+  function updateParticles(delta) {
+    const step = Math.min(delta / 16.67, 3);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.vy += GRAVITY * step;
+      p.x += p.vx * step;
+      p.y += p.vy * step;
+
+      if (p.x < p.r) {
+        p.x = p.r;
+        p.vx *= -0.5;
+      } else if (p.x > VIEW_W - p.r) {
+        p.x = VIEW_W - p.r;
+        p.vx *= -0.5;
+      }
+      if (p.y > VIEW_H - p.r) {
+        p.y = VIEW_H - p.r;
+        p.vy *= -0.35;
+        p.vx *= 0.7;
+        p.decay *= 2.2; // 바닥에 닿은 물방울은 고이지 않고 빠르게 스며든다
+      }
+
+      p.life -= p.decay * step;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      flashes[i].life -= 0.06 * step;
+      if (flashes[i].life <= 0) flashes.splice(i, 1);
+    }
+  }
+
+  function drawParticles() {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    flashes.forEach(f => {
+      const y = f.row * BLOCK;
+      const gradient = ctx.createLinearGradient(0, y, 0, y + BLOCK);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      gradient.addColorStop(0.5, 'rgba(210, 240, 255, 1)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.globalAlpha = Math.max(f.life, 0) * 0.7;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, y, VIEW_W, BLOCK);
+    });
+
+    particles.forEach(p => {
+      const speed = Math.hypot(p.vx, p.vy);
+      const stretch = 1 + Math.min(speed / 9, 0.9);
+      const alpha = Math.max(p.life, 0);
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.atan2(p.vy, p.vx));
+      ctx.scale(stretch, 1 / stretch);
+
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(-p.r * 0.25, -p.r * 0.25, p.r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    });
+
+    ctx.restore();
+  }
+
+  /* ---------- 판 ---------- */
+
+  function clearLines() {
+    let cleared = 0;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (grid[r].every(cell => cell !== null)) {
+        spawnDroplets(r, grid[r]);
+        grid.splice(r, 1);
+        grid.unshift(Array(COLS).fill(null));
+        cleared++;
+        r++;
+      }
+    }
+    if (cleared > 0) {
+      const points = [0, 100, 300, 500, 800][cleared] || 800;
+      score += points * level;
+      lines += cleared;
+      level = 1 + Math.floor(lines / 10);
+      dropInterval = Math.max(100, 1000 - (level - 1) * 80);
+      updateStats();
+      lastClearEl.textContent = CLEAR_NAMES[Math.min(cleared, 4)];
+      surge(scoreEl);
+      surge(linesEl);
+    }
+  }
+
+  function surge(el) {
+    el.classList.remove('surge');
+    void el.offsetWidth;
+    el.classList.add('surge');
+  }
+
+  function updateStats() {
+    scoreEl.textContent = score;
+    levelEl.textContent = level;
+    linesEl.textContent = lines;
+  }
+
+  function spawn() {
+    current = next;
+    next = randomPiece();
+    current.x = Math.floor(COLS / 2) - 2;
+    current.y = -1;
+    drawNext();
+    if (collides(current.cells, current.x, current.y)) {
+      gameOver();
+    }
+  }
+
+  function gameOver() {
+    running = false;
+    finalScoreEl.textContent = score;
+    finalNoteEl.textContent = lines > 0
+      ? lines + '줄을 지웠습니다.'
+      : '한 줄도 지우지 못했습니다.';
+    gameOverEl.hidden = false;
+    pauseBtn.textContent = '일시정지';
+  }
+
+  function move(dx) {
+    if (!collides(current.cells, current.x + dx, current.y)) {
+      current.x += dx;
+    }
+  }
+
+  function softDrop() {
+    if (!collides(current.cells, current.x, current.y + 1)) {
+      current.y += 1;
+      return true;
+    }
+    lockPiece();
+    return false;
+  }
+
+  function hardDrop() {
+    while (!collides(current.cells, current.x, current.y + 1)) {
+      current.y += 1;
+    }
+    lockPiece();
+  }
+
+  function lockPiece() {
+    merge();
+    clearLines();
+    spawn();
+  }
+
+  function rotate() {
+    if (current.key === 'O') return;
+    const rotated = rotateCells(current.cells);
+    if (!collides(rotated, current.x, current.y)) {
+      current.cells = rotated;
+    } else if (!collides(rotated, current.x - 1, current.y)) {
+      current.x -= 1;
+      current.cells = rotated;
+    } else if (!collides(rotated, current.x + 1, current.y)) {
+      current.x += 1;
+      current.cells = rotated;
+    }
+  }
+
+  /* ---------- 그리기 ---------- */
+
+  function drawCell(context, x, y, color, size) {
+    const unit = size || BLOCK;
+    context.fillStyle = color;
+    context.fillRect(x * unit, y * unit, unit - 1, unit - 1);
+    // 블록 윗면의 물빛 반사
+    context.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    context.fillRect(x * unit, y * unit, unit - 1, 2);
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0d1b28';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid[r][c]) drawCell(ctx, c, r, grid[r][c]);
+      }
+    }
+
+    if (running) {
+      current.cells.forEach(({ x, y }) => {
+        const gy = y + current.y;
+        if (gy >= 0) drawCell(ctx, x + current.x, gy, COLORS[current.key]);
+      });
+    }
+
+    drawParticles();
+  }
+
+  function drawNext() {
+    nextCtx.fillStyle = '#0d1b28';
+    nextCtx.fillRect(0, 0, NEXT_VIEW, NEXT_VIEW);
+
+    const xs = next.cells.map(c => c.x);
+    const ys = next.cells.map(c => c.y);
+    const offX = (NEXT_VIEW - (Math.max(...xs) - Math.min(...xs) + 1) * NEXT_CELL) / 2 - Math.min(...xs) * NEXT_CELL;
+    const offY = (NEXT_VIEW - (Math.max(...ys) - Math.min(...ys) + 1) * NEXT_CELL) / 2 - Math.min(...ys) * NEXT_CELL;
+
+    nextCtx.save();
+    nextCtx.translate(offX, offY);
+    next.cells.forEach(({ x, y }) => drawCell(nextCtx, x, y, COLORS[next.key], NEXT_CELL));
+    nextCtx.restore();
+  }
+
+  function update(time = 0) {
+    const delta = Math.min(time - lastTime, 100);
+    lastTime = time;
+
+    if (!paused) {
+      if (running) {
+        dropCounter += delta;
+        if (dropCounter > dropInterval) {
+          softDrop();
+          dropCounter = 0;
+        }
+      }
+      updateParticles(delta);
+      draw();
+    }
+
+    // 게임 오버 뒤에도 남은 물방울이 사라질 때까지 계속 그린다
+    if (running || particles.length > 0 || flashes.length > 0) {
+      animationId = requestAnimationFrame(update);
+    }
+  }
+
+  function resetGame() {
+    grid = createGrid();
+    score = 0;
+    level = 1;
+    lines = 0;
+    dropInterval = 1000;
+    dropCounter = 0;
+    lastTime = 0;
+    paused = false;
+    particles = [];
+    flashes = [];
+    lastClearEl.textContent = '—';
+    pauseBtn.textContent = '일시정지';
+    introEl.hidden = true;
+    gameOverEl.hidden = true;
+    next = randomPiece();
+    spawn();
+    updateStats();
+  }
+
+  function startGame() {
+    cancelAnimationFrame(animationId);
+    resetGame();
+    running = true;
+    startBtn.textContent = '다시 시작';
+    animationId = requestAnimationFrame(update);
+  }
+
+  function togglePause() {
+    if (!running) return;
+    paused = !paused;
+    pauseBtn.textContent = paused ? '계속하기' : '일시정지';
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P') {
+      togglePause();
+      return;
+    }
+    if (!running || paused) return;
+    switch (e.key) {
+      case 'ArrowLeft':  e.preventDefault(); move(-1); break;
+      case 'ArrowRight': e.preventDefault(); move(1); break;
+      case 'ArrowDown':  e.preventDefault(); softDrop(); break;
+      case 'ArrowUp':    e.preventDefault(); rotate(); break;
+      case ' ':          e.preventDefault(); hardDrop(); break;
+    }
+  });
+
+  function padAction(id, action) {
+    document.getElementById(id).addEventListener('click', () => {
+      if (running && !paused) action();
+    });
+  }
+
+  padAction('padLeft', () => move(-1));
+  padAction('padRight', () => move(1));
+  padAction('padRotate', rotate);
+  padAction('padDrop', hardDrop);
+
+  startBtn.addEventListener('click', startGame);
+  document.getElementById('introStart').addEventListener('click', startGame);
+  document.getElementById('againBtn').addEventListener('click', startGame);
+  pauseBtn.addEventListener('click', togglePause);
+
+  // 시작 전 화면: 그럴듯한 자리에 블록을 깔아 둔다
+  grid = createGrid();
+  RESTING_ROWS.forEach((row, i) => {
+    const r = ROWS - RESTING_ROWS.length + i;
+    row.split('').forEach((ch, c) => {
+      if (COLORS[ch]) grid[r][c] = COLORS[ch];
+    });
+  });
+  next = randomPiece();
+  current = randomPiece();
+  draw();
+  drawNext();
+</script>
+</body>
+</html>
